@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}RBAC System — Home{% endblock %}
+{% block content %}
+<div class="p-5 mb-4 bg-white rounded-3 shadow-sm">
+  <h1 class="display-6 fw-bold">Role-Based Access Control (RBAC) System</h1>
+  <p class="col-md-8 fs-6 text-muted">
+    A Flask reference implementation of NIST SP 800-162 RBAC with JWT
+    authentication, fine-grained per-resource permissions, and
+    privilege-escalation detection, aligned with the OWASP Access
+    Control Cheat Sheet.
+  </p>
+  <a href="/login-page" class="btn btn-primary btn-lg">Log In</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">Roles</h5>
+        <p class="card-text text-muted small">Admin, Manager, User, Guest — each mapped to a ranked hierarchy per NIST core RBAC.</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">Fine-Grained Permissions</h5>
+        <p class="card-text text-muted small">Every route checks a specific (resource, operation) pair against the database — not just a role name.</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">Escalation Detection</h5>
+        <p class="card-text text-muted small">JWT role claims are cross-checked against the database on every request; mismatches are logged as CRITICAL events.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

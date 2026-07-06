@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — RBAC System{% endblock %}
+{% block content %}
+<h3 class="mb-3">Dashboard</h3>
+<div id="welcome-card" class="alert alert-info"></div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">Documents</h5>
+        <ul id="documents-list" class="list-group list-group-flush mb-3"></ul>
+        <div class="input-group input-group-sm" id="doc-create-group">
+          <input type="text" id="new-doc-name" class="form-control" placeholder="document name, e.g. Q3-plan.docx">
+          <button id="btn-new-doc" class="btn btn-outline-primary">+ Add</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">Reports</h5>
+        <ul id="reports-list" class="list-group list-group-flush mb-3"></ul>
+        <div class="input-group input-group-sm" id="report-create-group">
+          <input type="text" id="new-report-name" class="form-control" placeholder="report name, e.g. headcount.csv">
+          <button id="btn-new-report" class="btn btn-outline-primary">+ Add</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="action-feedback" class="mt-3"></div>
+{% endblock %}
+{% block scripts %}
+<script>
+function flash(msg, type) {
+  document.getElementById("action-feedback").innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+}
+
+async function refreshDocuments() {
+  const docsResp = await apiFetch("/api/documents");
+  const docsList = document.getElementById("documents-list");
+  docsList.innerHTML = "";
+  if (docsResp && docsResp.ok) {
+    const data = await docsResp.json();
+    if (data.documents.length === 0) {
+      docsList.innerHTML = '<li class="list-group-item text-muted small">No documents yet.</li>';
+    }
+    data.documents.forEach(d => {
+      const li = document.createElement("li");
+      li.className = "list-group-item d-flex justify-content-between align-items-center";
+      li.innerHTML = `<span>${d.name} <span class="text-muted small">— ${d.created_by || ""}</span></span>
+        <button class="btn btn-sm btn-outline-danger delete-doc" data-id="${d.id}">✕</button>`;
+      docsList.appendChild(li);
+    });
+    docsList.querySelectorAll(".delete-doc").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const resp = await apiFetch(`/api/documents/${btn.dataset.id}`, { method: "DELETE" });
+        const data = resp ? await resp.json() : {};
+        flash(resp && resp.ok ? data.message : (data.error || "Failed"), resp && resp.ok ? "success" : "danger");
+        refreshDocuments();
+      });
+    });
+    document.getElementById("doc-create-group").classList.remove("d-none");
+  } else {
+    docsList.innerHTML = '<li class="list-group-item text-muted small">No access to documents.</li>';
+    document.getElementById("doc-create-group").classList.add("d-none");
+  }
+}
+
+async function refreshReports() {
+  const repResp = await apiFetch("/api/reports");
+  const repList = document.getElementById("reports-list");
+  repList.innerHTML = "";
+  if (repResp && repResp.ok) {
+    const data = await repResp.json();
+    if (data.reports.length === 0) {
+      repList.innerHTML = '<li class="list-group-item text-muted small">No reports yet.</li>';
+    }
+    data.reports.forEach(r => {
+      const li = document.createElement("li");
+      li.className = "list-group-item d-flex justify-content-between align-items-center";
+      li.innerHTML = `<span>${r.name} <span class="text-muted small">— ${r.created_by || ""}</span></span>
+        <button class="btn btn-sm btn-outline-danger delete-report" data-id="${r.id}">✕</button>`;
+      repList.appendChild(li);
+    });
+    repList.querySelectorAll(".delete-report").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const resp = await apiFetch(`/api/reports/${btn.dataset.id}`, { method: "DELETE" });
+        const data = resp ? await resp.json() : {};
+        flash(resp && resp.ok ? data.message : (data.error || "Failed"), resp && resp.ok ? "success" : "danger");
+        refreshReports();
+      });
+    });
+    document.getElementById("report-create-group").classList.remove("d-none");
+  } else {
+    repList.innerHTML = '<li class="list-group-item text-muted small">No access to reports.</li>';
+    document.getElementById("report-create-group").classList.add("d-none");
+  }
+}
+
+async function init() {
+  if (!getToken()) { window.location.href = "/login-page"; return; }
+
+  const dash = await apiFetch("/api/dashboard");
+  if (dash && dash.ok) {
+    const data = await dash.json();
+    document.getElementById("welcome-card").textContent =
+      `${data.message} Your role is: ${data.role}.`;
+  } else if (dash) {
+    document.getElementById("welcome-card").className = "alert alert-warning";
+    document.getElementById("welcome-card").textContent = "You do not have dashboard access.";
+  }
+
+  await refreshDocuments();
+  await refreshReports();
+}
+
+document.getElementById("btn-new-doc").addEventListener("click", async () => {
+  const nameInput = document.getElementById("new-doc-name");
+  const resp = await apiFetch("/api/documents", { method: "POST", body: JSON.stringify({ name: nameInput.value.trim() }) });
+  const data = resp ? await resp.json() : {};
+  flash(resp && resp.ok ? data.message : (data.error || "Action failed"), resp && resp.ok ? "success" : "danger");
+  if (resp && resp.ok) { nameInput.value = ""; refreshDocuments(); }
+});
+
+document.getElementById("btn-new-report").addEventListener("click", async () => {
+  const nameInput = document.getElementById("new-report-name");
+  const resp = await apiFetch("/api/reports", { method: "POST", body: JSON.stringify({ name: nameInput.value.trim() }) });
+  const data = resp ? await resp.json() : {};
+  flash(resp && resp.ok ? data.message : (data.error || "Action failed"), resp && resp.ok ? "success" : "danger");
+  if (resp && resp.ok) { nameInput.value = ""; refreshReports(); }
+});
+
+init();
+</script>
+{% endblock %}

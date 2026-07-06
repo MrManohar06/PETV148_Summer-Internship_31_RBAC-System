@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Log In — RBAC System{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h4 class="card-title mb-3">Log In</h4>
+        <div id="login-error" class="alert alert-danger d-none"></div>
+        <form id="login-form">
+          <div class="mb-3">
+            <label class="form-label">Username</label>
+            <input type="text" class="form-control" id="username" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" id="password" required>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Log In</button>
+        </form>
+        <hr>
+        <p class="small text-muted mb-1">Demo accounts (seeded):</p>
+        <ul class="small text-muted mb-0">
+          <li>admin / Admin!2345</li>
+          <li>manager / Manager!2345</li>
+          <li>alice / User!2345</li>
+          <li>guest / Guest!2345</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const username = document.getElementById("username").value;
+  const password = document.getElementById("password").value;
+  const errorBox = document.getElementById("login-error");
+  errorBox.classList.add("d-none");
+
+  const resp = await fetch("/api/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    errorBox.textContent = data.error || "Login failed.";
+    errorBox.classList.remove("d-none");
+    return;
+  }
+  setToken(data.token);
+  window.location.href = "/dashboard-page";
+});
+</script>
+{% endblock %}

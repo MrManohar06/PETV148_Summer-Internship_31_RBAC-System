@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+{% block title %}Admin Console — RBAC System{% endblock %}
+{% block content %}
+<h3 class="mb-3">Admin Console</h3>
+<div id="admin-denied" class="alert alert-warning d-none">
+  You do not have permission to view this page. This attempt has been logged.
+</div>
+<div id="admin-feedback"></div>
+
+<div id="admin-content" class="d-none">
+
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>User &amp; Role Management</span>
+      <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#newUserModal">+ New User</button>
+    </div>
+    <div class="card-body">
+      <table class="table table-sm align-middle">
+        <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Change Role</th><th></th></tr></thead>
+        <tbody id="users-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>Permission Matrix</span>
+      <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#newPermissionModal">+ New Permission</button>
+    </div>
+    <div class="card-body">
+      <p class="small text-muted">
+        Toggle which permissions Guest / User / Manager hold. Admin's own permissions
+        are locked to prevent accidental lockout of the system.
+      </p>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead id="permissions-table-head"><tr><th>Permission</th></tr></thead>
+          <tbody id="permissions-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Security Audit Log</div>
+    <div class="card-body" style="max-height: 400px; overflow-y:auto;">
+      <table class="table table-sm">
+        <thead><tr><th>Time</th><th>Event</th><th>User</th><th>Detail</th><th>Severity</th></tr></thead>
+        <tbody id="audit-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- New User Modal -->
+<div class="modal fade" id="newUserModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Create New User</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="new-user-error" class="alert alert-danger d-none"></div>
+        <div class="mb-2"><label class="form-label">Username</label><input class="form-control" id="nu-username"></div>
+        <div class="mb-2"><label class="form-label">Email</label><input class="form-control" id="nu-email"></div>
+        <div class="mb-2"><label class="form-label">Password</label><input type="password" class="form-control" id="nu-password"></div>
+        <div class="mb-2">
+          <label class="form-label">Role</label>
+          <select class="form-select" id="nu-role">
+            <option>Guest</option><option selected>User</option><option>Manager</option><option>Admin</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="nu-submit">Create User</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New Permission Modal -->
+<div class="modal fade" id="newPermissionModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Create New Permission</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="new-perm-error" class="alert alert-danger d-none"></div>
+        <div class="mb-2">
+          <label class="form-label">Resource</label>
+          <input class="form-control" id="np-resource" placeholder="e.g. invoices">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Operation</label>
+          <input class="form-control" id="np-operation" placeholder="e.g. approve">
+        </div>
+        <p class="small text-muted mb-0">After creating it, grant it to roles from the Permission Matrix table.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="np-submit">Create Permission</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const ROLES = ["Guest", "User", "Manager", "Admin"];
+let EDITABLE_ROLES = ["Guest", "User", "Manager"];
+
+function severityBadge(sev) {
+  const cls = { CRITICAL: "bg-danger", WARNING: "bg-warning text-dark", INFO: "bg-secondary" }[sev] || "bg-secondary";
+  return `<span class="badge ${cls}">${sev}</span>`;
+}
+
+function flash(msg, type = "success") {
+  const box = document.getElementById("admin-feedback");
+  box.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+  setTimeout(() => { box.innerHTML = ""; }, 4000);
+}
+
+async function loadUsers() {
+  const resp = await apiFetch("/api/admin/users");
+  if (!resp || !resp.ok) return false;
+  const data = await resp.json();
+  const body = document.getElementById("users-table-body");
+  body.innerHTML = "";
+  data.users.forEach(u => {
+    const tr = document.createElement("tr");
+    const selectOptions = ROLES.map(r => `<option value="${r}" ${r === u.role ? "selected" : ""}>${r}</option>`).join("");
+    tr.innerHTML = `
+      <td>${u.username}</td>
+      <td>${u.email}</td>
+      <td>${u.role}</td>
+      <td>
+        <select class="form-select form-select-sm role-select" data-user-id="${u.id}" style="width:auto;display:inline-block;">
+          ${selectOptions}
+        </select>
+        <button class="btn btn-sm btn-outline-primary save-role" data-user-id="${u.id}">Save</button>
+      </td>
+      <td><button class="btn btn-sm btn-outline-danger delete-user" data-user-id="${u.id}" data-username="${u.username}">Delete</button></td>`;
+    body.appendChild(tr);
+  });
+
+  document.querySelectorAll(".save-role").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const userId = btn.dataset.userId;
+      const select = document.querySelector(`.role-select[data-user-id="${userId}"]`);
+      const newRole = select.value;
+      const resp = await apiFetch(`/api/admin/users/${userId}/role`, {
+        method: "PUT", body: JSON.stringify({ role: newRole }),
+      });
+      const data = resp ? await resp.json() : {};
+      flash(resp && resp.ok ? data.message : (data.error || "Failed to change role"), resp && resp.ok ? "success" : "danger");
+      loadAuditLog();
+    });
+  });
+
+  document.querySelectorAll(".delete-user").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm(`Delete user '${btn.dataset.username}'? This cannot be undone.`)) return;
+      const resp = await apiFetch(`/api/admin/users/${btn.dataset.userId}`, { method: "DELETE" });
+      const data = resp ? await resp.json() : {};
+      flash(resp && resp.ok ? data.message : (data.error || "Failed to delete user"), resp && resp.ok ? "success" : "danger");
+      loadUsers();
+      loadAuditLog();
+    });
+  });
+  return true;
+}
+
+async function loadPermissions() {
+  const resp = await apiFetch("/api/admin/permissions");
+  if (!resp || !resp.ok) {
+    document.getElementById("permissions-table-head").innerHTML = "<tr><th>Permission</th></tr>";
+    document.getElementById("permissions-table-body").innerHTML =
+      '<tr><td class="text-muted small">No access to permission management.</td></tr>';
+    return;
+  }
+  const data = await resp.json();
+  EDITABLE_ROLES = data.editable_roles;
+
+  const head = document.getElementById("permissions-table-head");
+  head.innerHTML = "<tr><th>Permission</th>" + data.roles.map(r =>
+    `<th class="text-center">${r}${EDITABLE_ROLES.includes(r) ? "" : " 🔒"}</th>`).join("") + "</tr>";
+
+  const body = document.getElementById("permissions-table-body");
+  body.innerHTML = "";
+  data.permissions.forEach(p => {
+    const tr = document.createElement("tr");
+    let cells = `<td><code>${p.operation}:${p.resource}</code></td>`;
+    data.roles.forEach(roleName => {
+      const granted = p.granted_to.includes(roleName);
+      const editable = EDITABLE_ROLES.includes(roleName);
+      cells += `<td class="text-center">
+        <input type="checkbox" class="form-check-input perm-toggle"
+          data-permission-id="${p.id}" data-role="${roleName}"
+          ${granted ? "checked" : ""} ${editable ? "" : "disabled"}>
+      </td>`;
+    });
+    tr.innerHTML = cells;
+    body.appendChild(tr);
+  });
+
+  document.querySelectorAll(".perm-toggle").forEach(cb => {
+    cb.addEventListener("change", async () => {
+      const roleName = cb.dataset.role;
+      const permissionId = cb.dataset.permissionId;
+      const resp = await apiFetch(`/api/admin/roles/${roleName}/permissions`, {
+        method: "PUT",
+        body: JSON.stringify({ permission_id: permissionId, grant: cb.checked }),
+      });
+      const data = resp ? await resp.json() : {};
+      if (!resp || !resp.ok) {
+        cb.checked = !cb.checked; // revert
+        flash(data.error || "Failed to update permission", "danger");
+      } else {
+        flash(data.message, "success");
+      }
+      loadAuditLog();
+    });
+  });
+}
+
+async function loadAuditLog() {
+  const resp = await apiFetch("/api/admin/audit-log");
+  if (!resp || !resp.ok) return;
+  const data = await resp.json();
+  const body = document.getElementById("audit-table-body");
+  body.innerHTML = "";
+  data.entries.forEach(e => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="small text-nowrap">${new Date(e.timestamp).toLocaleString()}</td>
+      <td class="small">${e.event_type}</td>
+      <td class="small">${e.username || "-"}</td>
+      <td class="small">${e.detail || ""}</td>
+      <td>${severityBadge(e.severity)}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+document.getElementById("nu-submit").addEventListener("click", async () => {
+  const payload = {
+    username: document.getElementById("nu-username").value.trim(),
+    email: document.getElementById("nu-email").value.trim(),
+    password: document.getElementById("nu-password").value,
+    role: document.getElementById("nu-role").value,
+  };
+  const errBox = document.getElementById("new-user-error");
+  errBox.classList.add("d-none");
+  const resp = await apiFetch("/api/admin/users", { method: "POST", body: JSON.stringify(payload) });
+  const data = resp ? await resp.json() : {};
+  if (!resp || !resp.ok) {
+    errBox.textContent = data.error || "Failed to create user";
+    errBox.classList.remove("d-none");
+    return;
+  }
+  bootstrap.Modal.getInstance(document.getElementById("newUserModal")).hide();
+  flash(data.message, "success");
+  loadUsers();
+  loadAuditLog();
+});
+
+document.getElementById("np-submit").addEventListener("click", async () => {
+  const payload = {
+    resource: document.getElementById("np-resource").value.trim(),
+    operation: document.getElementById("np-operation").value.trim(),
+  };
+  const errBox = document.getElementById("new-perm-error");
+  errBox.classList.add("d-none");
+  const resp = await apiFetch("/api/admin/permissions", { method: "POST", body: JSON.stringify(payload) });
+  const data = resp ? await resp.json() : {};
+  if (!resp || !resp.ok) {
+    errBox.textContent = data.error || "Failed to create permission";
+    errBox.classList.remove("d-none");
+    return;
+  }
+  bootstrap.Modal.getInstance(document.getElementById("newPermissionModal")).hide();
+  flash(data.message, "success");
+  loadPermissions();
+  loadAuditLog();
+});
+
+async function init() {
+  if (!getToken()) { window.location.href = "/login-page"; return; }
+  const ok = await loadUsers();
+  if (!ok) {
+    document.getElementById("admin-denied").classList.remove("d-none");
+    return;
+  }
+  document.getElementById("admin-content").classList.remove("d-none");
+  loadPermissions();
+  loadAuditLog();
+}
+init();
+</script>
+{% endblock %}
